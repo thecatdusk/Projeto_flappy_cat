@@ -14,7 +14,7 @@ public class Cena implements GLEventListener{
     OvniGato ovni;
     private long lastFrame;
     private double deltaT;
-    private int windowW, windowH;
+    private boolean podePular;
     
     // Variaveis de hitbox
     public float gatoAltura, gatoTamanho;
@@ -31,6 +31,7 @@ public class Cena implements GLEventListener{
         gatoAltura = 50;
         gatoTamanho = 5f;
         lastFrame = 0;
+        deltaT = 0;
         ovni = new OvniGato();
         
     }
@@ -45,7 +46,6 @@ public class Cena implements GLEventListener{
         gl.glClear(GL2.GL_COLOR_BUFFER_BIT);       
         gl.glLoadIdentity(); //lê a matriz identidade
         
-        
         // Calculo do delta
         if(lastFrame == 0){
             lastFrame = System.currentTimeMillis();
@@ -53,13 +53,19 @@ public class Cena implements GLEventListener{
             deltaT = System.currentTimeMillis() - lastFrame;
             deltaT /= 1000;
             lastFrame = System.currentTimeMillis();
+            //System.out.println(deltaT);
         }
-        // Calculo da física
         
-        // desenho da cena        
+        // Calculo de fisica
+        if (podePular){
+            ovni.pular();
+            podePular = false;
+        }
+        ovni.calcularGravidade(deltaT);
+        ovni.moverOvni(deltaT);
+        
+        // desenho da cena
         ovni.desenhaOvni(gl);
-        
-        //hitBoxGato(gl);
              
     }
 
@@ -97,15 +103,10 @@ public class Cena implements GLEventListener{
     @Override
     public void dispose(GLAutoDrawable drawable) {}
     
-    public void hitBoxGato(GL2 gl){
-        gl.glColor3d(1, 1, 1);
-        gl.glBegin(GL2.GL_POLYGON);
-            gl.glVertex2d(10 + gatoTamanho, gatoAltura + gatoTamanho);
-            gl.glVertex2d(10 - gatoTamanho, gatoAltura + gatoTamanho);
-            gl.glVertex2d(10 - gatoTamanho, gatoAltura - gatoTamanho);
-            gl.glVertex2d(10 + gatoTamanho, gatoAltura - gatoTamanho);
-        gl.glEnd();
+    public void setPular(boolean confirmacao){
+        if ((!podePular)&&(confirmacao)){
+            podePular = confirmacao;
+        }
     }
-    
     
 }

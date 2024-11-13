@@ -7,6 +7,7 @@ import com.jogamp.opengl.glu.GLU;
 
 public class OvniGato {
     private float alturaBase, larguraBase, alturaCapsula, larguraCapsula, yOvni, xOvni, velocidade;
+    private Float GRAVIDADE = -3.5f;
     public OvniGato(){
         alturaBase = 0.08f;
         larguraBase = 0.15f;
@@ -32,7 +33,16 @@ public class OvniGato {
             gl.glVertex2d(xOvni + larguraCapsula, yOvni + alturaBase);
         gl.glEnd();
     }
-    public void moverOvni(double delta, double gravidade){
-        yOvni += velocidade;
+    
+    public void calcularGravidade(double deltaT){
+        velocidade += GRAVIDADE * deltaT;
+    }
+    
+    public void pular(){
+        velocidade = 1.5f;
+    }
+    
+    public void moverOvni(double deltaT){
+        yOvni += velocidade * deltaT;
     }
 }
