@@ -20,7 +20,7 @@ public class KeyBoard implements KeyListener{
             System.exit(0);
         }
         if(e.getKeyCode() == KeyEvent.VK_SPACE){
-            cena.setPular(true);
+            cena.ovniPular();
         }
     }
 

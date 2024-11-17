@@ -4,6 +4,7 @@ import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.glu.GLU;
+import java.util.ArrayList;
 /**
  *
  * @author Kakugawa
@@ -13,11 +14,9 @@ public class Cena implements GLEventListener{
     GLU glu;
     OvniGato ovni;
     private long lastFrame;
-    private double deltaT;
-    private boolean podePular;
-    
-    // Variaveis de hitbox
-    public float gatoAltura, gatoTamanho;
+    private double deltaT, timerAsteroide;
+    private boolean colidiu;
+    ArrayList<Asteroide> listaAsteroide = new ArrayList<Asteroide>();
     
     @Override
     public void init(GLAutoDrawable drawable) {
@@ -28,8 +27,6 @@ public class Cena implements GLEventListener{
         xMax = yMax = zMax = 1;
         
         //Inicia as variáveis de jogo
-        gatoAltura = 50;
-        gatoTamanho = 5f;
         lastFrame = 0;
         deltaT = 0;
         ovni = new OvniGato();
@@ -47,25 +44,19 @@ public class Cena implements GLEventListener{
         gl.glLoadIdentity(); //lê a matriz identidade
         
         // Calculo do delta
-        if(lastFrame == 0){
-            lastFrame = System.currentTimeMillis();
-        }else{
-            deltaT = System.currentTimeMillis() - lastFrame;
-            deltaT /= 1000;
-            lastFrame = System.currentTimeMillis();
-            //System.out.println(deltaT);
-        }
+        calcDeltaT();
+        
+        // Timer de spawn de asteroides
+        timerSpawn();
         
         // Calculo de fisica
-        if (podePular){
-            ovni.pular();
-            podePular = false;
-        }
-        ovni.calcularGravidade(deltaT);
-        ovni.moverOvni(deltaT);
+        calcFisica();
         
         // desenho da cena
-        ovni.desenhaOvni(gl);
+        desenhaCena(gl);
+        
+        
+        gl.glFlush(); 
              
     }
 
@@ -103,10 +94,57 @@ public class Cena implements GLEventListener{
     @Override
     public void dispose(GLAutoDrawable drawable) {}
     
-    public void setPular(boolean confirmacao){
-        if ((!podePular)&&(confirmacao)){
-            podePular = confirmacao;
+    public void ovniPular(){
+        ovni.pular();
+    }
+    
+    public void calcFisica(){
+        ovni.calcularGravidade(deltaT);
+        ovni.moverOvni(deltaT);
+        for(int i = 0; i < listaAsteroide.size(); i++){
+            listaAsteroide.get(i).moverAsteroide(deltaT);
+            if(listaAsteroide.get(i).getPosicaoX() <= -2.5){
+                listaAsteroide.remove(i);
+            }
+        }
+        for(int i = 0; i < listaAsteroide.size(); i++){
+            colidiu = ovni.verificarColisao(listaAsteroide.get(i).getPosicaoX(), listaAsteroide.get(i).getPosicaoY(), listaAsteroide.get(i).getTamanho());
+            if (colidiu){
+                ovniBateu();
+            }
         }
     }
     
+    public void desenhaCena(GL2 gl){
+        ovni.desenhaOvni(gl);
+        for(int i = 0; i < listaAsteroide.size(); i++){
+            listaAsteroide.get(i).desenhaAsteroide(gl);
+        }
+    }
+    
+    public void calcDeltaT(){
+        if(lastFrame == 0){
+            lastFrame = System.currentTimeMillis();
+        }else{
+            deltaT = System.currentTimeMillis() - lastFrame;
+            deltaT /= 1000;
+            lastFrame = System.currentTimeMillis();
+        }
+    }
+    
+    public void timerSpawn(){
+        timerAsteroide += deltaT;
+        if (timerAsteroide >= 1.25){
+            spawnAsteroide();
+            timerAsteroide = 0.0;
+        }
+    }
+    
+    public void spawnAsteroide(){
+        listaAsteroide.add(new Asteroide());
+    }
+    
+    public void ovniBateu(){
+        System.out.println("Bateu!");
+    }
 }
