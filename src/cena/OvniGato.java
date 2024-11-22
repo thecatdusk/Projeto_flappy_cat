@@ -62,4 +62,20 @@ public class OvniGato {
         }
         return colidiu;
     }
+    
+    public boolean colisaoBorda(){
+        boolean colidiu = false;
+        if ((yOvni + alturaBase + alturaCapsula > 1)||(yOvni < -1)){
+            colidiu = true;
+        }
+        return colidiu;
+    }
+    
+    public boolean verificarPonto(double asteroideX, boolean valePonto){
+        boolean fezPonto = false;
+        if((xOvni >= asteroideX)&&(valePonto)){
+            fezPonto = true;
+        }
+        return fezPonto;
+    }
 }

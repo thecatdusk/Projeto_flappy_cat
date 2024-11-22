@@ -7,12 +7,14 @@ import com.jogamp.opengl.glu.GLU;
 
 public class Asteroide {
     private double posicaoX, posicaoY, tamanho;
-    private final float VELOCIDADE = -1.5f;
+    private final float VELOCIDADE = -0.75f;
+    private boolean valePonto;
     
     public Asteroide(){
         posicaoX = 2;
         posicaoY = (Math.random()*1.33) - 0.66;
         tamanho = ((Math.random()/3) + 0.66)/2;
+        valePonto = true;
         //System.out.println(tamanho + ", " + posicaoY);
     }
     
@@ -40,5 +42,13 @@ public class Asteroide {
     
     public double getPosicaoY(){
         return posicaoY;
+    }
+    
+    public boolean getValePonto(){
+        return valePonto;
+    }
+    
+    public void fezPonto(){
+        valePonto = false;
     }
 }
