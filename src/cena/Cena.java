@@ -4,7 +4,9 @@ import com.jogamp.opengl.GL2;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLEventListener;
 import com.jogamp.opengl.glu.GLU;
+import com.jogamp.opengl.util.gl2.GLUT;
 import java.util.ArrayList;
+import textura.Textura;
 import com.jogamp.opengl.util.awt.TextRenderer; //ADICIONADO
 import java.awt.Color; //ADICIONADO
 import java.awt.Font; //ADICIONADO
@@ -13,26 +15,61 @@ import java.awt.Font; //ADICIONADO
  * @author Kakugawa
  */
 public class Cena implements GLEventListener{    
-    private float xMin, xMax, yMin, yMax, zMin, zMax;    
+    // Variaveis do Modelo
+    private float xMin, xMax, yMin, yMax, zMin, zMax;
     GLU glu;
-    OvniGato ovni;
+    
+    // Variaveis de Textura
+    private float limite;
+    private Textura textura = null;
+    private int totalTextura = 4;
+    private static final String TEXTURA_ASTEROIDE = "imagens/TexturaAsteroide.jpg";
+    private static final String TEXTURA_METAL_OVNI = "imagens/TexturaOvniMetal.jpg";
+    private static final String TEXTURA_VIDRO_OVNI = "imagens/TexturaVidro.png";
+    private static final String TEXTURA_ESPACO = "imagens/TexturaEspaco.png";
+    
+    // Variaveis do calculo de tempo
     private long lastFrame;
     private double deltaT, timerAsteroide;
-    private boolean pausadoMenu, sairMenu, morteMenu, opVoltarPause, opMenuPause, opSairPause, opSimSair, opNaoSair, opTentarMorte, opMenuMorte, opSairMorte, telaJogo, telaMenu, telaControles, telaCreditos, opJogarMenu, opControlesMenu, opCreditosMenu, opSairMenu;
+    
+    // Objéto do Ovni
+    private OvniGato ovni;
+    
+    // Lista de Asteroides
     ArrayList<Asteroide> listaAsteroide;
+    
+    // Objeto de Texto
     private TextRenderer textRenderer;
+    
+    //Variaveis de Pontuação
     private int pontuacao;
+    
+    //Variaveis de Menu
+    private boolean pausadoMenu, sairMenu, morteMenu;
+    private boolean opVoltarPause, opMenuPause, opSairPause, opSimSair, opNaoSair, opTentarMorte, opMenuMorte, opSairMorte;
+    
+    // Variaveis de Tela
+    private boolean telaJogo, telaMenu, telaControles, telaCreditos, opJogarMenu, opControlesMenu, opCreditosMenu, opSairMenu;
     
     @Override
     public void init(GLAutoDrawable drawable) {
         //dados iniciais da cena
         glu = new GLU();
+        GL2 gl = drawable.getGL().getGL2(); //ADICIONADO
+        
         //Estabelece as coordenadas do SRU (Sistema de Referencia do Universo)
         xMin = yMin = zMin = -1;
         xMax = yMax = zMax = 1;
         
+        // Variaveis de Textura
+        limite = 256;
+        textura = new Textura(totalTextura);
         
-        textRenderer = new TextRenderer(new Font("Comic Sans MS Negrito", Font.PLAIN, 28));
+        // Habilitar Profundidade
+        gl.glEnable(GL2.GL_DEPTH_TEST);
+        
+        //Criação do Objeto de texto
+        textRenderer = new TextRenderer(new Font("Arial", Font.PLAIN, 28));
         
         //Inicia as variáveis de jogo
         lastFrame = 0;
@@ -44,21 +81,29 @@ public class Cena implements GLEventListener{
     public void display(GLAutoDrawable drawable) {  
         //obtem o contexto Opengl
         GL2 gl = drawable.getGL().getGL2();
+        GLUT glut = new GLUT();
         //ADICIONADO (Habilita o buffer de profundidade)
         //gl.glEnable(GL2.GL_DEPTH_TEST);
         //define a cor da janela (R, G, G, alpha)
         gl.glClearColor(0, 0, 0, 1);        
         //limpa a janela com a cor especificada
-        gl.glClear(GL2.GL_COLOR_BUFFER_BIT);       
+        gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);       
         gl.glLoadIdentity(); //lê a matriz identidade
+        
+        // Ativa a Iluminação
+        iluminacao(gl);
+        
+        // Desenha o Plano de fundo
+        desenhaFundo(gl);
         
         // Calculo do delta
         calcDeltaT();
         
-        if(telaJogo){
+        // Determina qual tela será carregada
+        if((telaJogo)&&(ovni != null)){
             timerSpawn();
             calcFisica();
-            desenhaJogo(gl);
+            desenhaJogo(gl, glut);
         }else if(telaMenu){
             desenhaMenu(gl);
         }else if(telaControles){
@@ -83,7 +128,7 @@ public class Cena implements GLEventListener{
         
         //seta o viewport para abranger a janela inteira
         gl.glViewport(0, 0, width, height);
-        
+                
         //ativa a matriz de projeção
         gl.glMatrixMode(GL2.GL_PROJECTION);      
         gl.glLoadIdentity(); //lê a matriz identidade
@@ -100,16 +145,17 @@ public class Cena implements GLEventListener{
         gl.glMatrixMode(GL2.GL_MODELVIEW);
         gl.glLoadIdentity(); //lê a matriz identidade
         //System.out.println("Reshape: " + width + ", " + height);
-    }    
+    }
        
     @Override
     public void dispose(GLAutoDrawable drawable) {}
     
     
-    
+    // Metodo que Calcula a fisica dentro do jogo
     public void calcFisica(){
         if((!pausadoMenu)&&(!morteMenu)){
             ovni.calcularGravidade(deltaT);
+            ovni.aplicaAnimacao(deltaT);
             ovni.moverOvni(deltaT);
             for(int i = 0; i < listaAsteroide.size(); i++){
                 listaAsteroide.get(i).moverAsteroide(deltaT);
@@ -131,6 +177,7 @@ public class Cena implements GLEventListener{
         
     }
     
+    // Metodo que calcula a variação de tempo entre um frame e outro
     public void calcDeltaT(){
         if(lastFrame == 0){
             lastFrame = System.currentTimeMillis();
@@ -141,6 +188,7 @@ public class Cena implements GLEventListener{
         }
     }
     
+    // Timer de invocação de asteroides
     public void timerSpawn(){
         if((!pausadoMenu)&&(!morteMenu)){
             timerAsteroide += deltaT;
@@ -151,115 +199,168 @@ public class Cena implements GLEventListener{
         }
     }
     
+    // Metodo para criação de novos asteroides
     public void spawnAsteroide(){
         listaAsteroide.add(new Asteroide());
     }
     
-    public void ovniBateu(){
-        System.out.println("Bateu!");
-    }
-    
+    // Metodo para marcação de pontos
     public void fezPonto(){
         pontuacao++;
     }
     
-    public void desenhaMenu(GL2 gl){
-        if(opJogarMenu){
-            gl.glColor3d(1, 0, 0);
+    // Metodo para desenhar o fundo do jogo
+    public void desenhaFundo(GL2 gl){
+        gl.glPushMatrix();
+            gl.glMatrixMode(GL2.GL_TEXTURE);
+                gl.glLoadIdentity();                      
+                gl.glScalef(limite/textura.getWidth(), limite/textura.getHeight(), limite);           
+            gl.glMatrixMode(GL2.GL_MODELVIEW);
+            textura.setAutomatica(false);
+            textura.setFiltro(GL2.GL_NEAREST);
+            textura.setModo(GL2.GL_DECAL);
+            textura.setWrap(GL2.GL_REPEAT);
+            textura.gerarTextura(gl, TEXTURA_ESPACO, 0);
+            gl.glColor3d(1, 1, 1);
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.36, -0.16);
-                gl.glVertex2d(-0.36, 0.01);
-                gl.glVertex2d(0.36, 0.01);
-                gl.glVertex2d(0.36, -0.16);
+                gl.glTexCoord2d(0, 0.5);
+                gl.glVertex3d(-2, -2, -0.3);
+                gl.glTexCoord2d(0.5, 0.5);
+                gl.glVertex3d(-2, 2, -0.3);
+                gl.glTexCoord2d(0.5, 0);
+                gl.glVertex3d(2, 2, -0.3);
+                gl.glTexCoord2d(0, 0);
+                gl.glVertex3d(2, -2, -0.3);
+            gl.glEnd();
+            textura.desabilitarTextura(gl, 0);
+        gl.glPopMatrix();
+    }
+    
+    // Metodo que desenha a tela de menu
+    public void desenhaMenu(GL2 gl){
+        gl.glColor3d(1, 1, 1);
+        gl.glBegin(GL2.GL_POLYGON);
+            gl.glVertex3d(-0.355, -0.155, 0.3);
+            gl.glVertex3d(-0.355, 0.005, 0.3);
+            gl.glVertex3d(0.355, 0.005, 0.3);
+            gl.glVertex3d(0.355, -0.155, 0.3);
+        gl.glEnd();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glBegin(GL2.GL_POLYGON);
+            gl.glVertex3d(-0.35, -0.15, 0.31);
+            gl.glVertex3d(-0.35, 0, 0.31);
+            gl.glVertex3d(0.35, 0, 0.31);
+            gl.glVertex3d(0.35, -0.15, 0.31);
+        gl.glEnd();
+        if(opJogarMenu){
+            gl.glColor3d(0.353, 0.004, 0.008);
+            gl.glBegin(GL2.GL_POLYGON);
+                gl.glVertex3d(-0.35, -0.15, 0.32);
+                gl.glVertex3d(-0.35, 0, 0.32);
+                gl.glVertex3d(0.35, 0, 0.32);
+                gl.glVertex3d(0.35, -0.15, 0.32);
             gl.glEnd();
         }
-        gl.glColor3d(0, 1, 1);
+        gl.glColor3d(1, 1, 1);
         gl.glBegin(GL2.GL_POLYGON);
-            gl.glVertex2d(-0.35, -0.15);
-            gl.glVertex2d(-0.35, 0);
-            gl.glVertex2d(0.35, 0);
-            gl.glVertex2d(0.35, -0.15);
+            gl.glVertex3d(-0.355, -0.355, 0.3);
+            gl.glVertex3d(-0.355, -0.195, 0.3);
+            gl.glVertex3d(0.355, -0.195, 0.3);
+            gl.glVertex3d(0.355, -0.355, 0.3);
+        gl.glEnd();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glBegin(GL2.GL_POLYGON);
+            gl.glVertex3d(-0.35, -0.35, 0.31);
+            gl.glVertex3d(-0.35, -0.2, 0.31);
+            gl.glVertex3d(0.35, -0.2, 0.31);
+            gl.glVertex3d(0.35, -0.35, 0.31);
         gl.glEnd();
         if(opControlesMenu){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.36, -0.36);
-                gl.glVertex2d(-0.36, -0.19);
-                gl.glVertex2d(0.36, -0.19);
-                gl.glVertex2d(0.36, -0.36);
+                gl.glVertex3d(-0.35, -0.35, 0.32);
+                gl.glVertex3d(-0.35, -0.2, 0.32);
+                gl.glVertex3d(0.35, -0.2, 0.32);
+                gl.glVertex3d(0.35, -0.35, 0.32);
             gl.glEnd();
         }
-        gl.glColor3d(0, 1, 1);
+        gl.glColor3d(1, 1, 1);
         gl.glBegin(GL2.GL_POLYGON);
-            gl.glVertex2d(-0.35, -0.35);
-            gl.glVertex2d(-0.35, -0.2);
-            gl.glVertex2d(0.35, -0.2);
-            gl.glVertex2d(0.35, -0.35);
+            gl.glVertex3d(-0.355, -0.555, 0.3);
+            gl.glVertex3d(-0.355, -0.395, 0.3);
+            gl.glVertex3d(0.355, -0.395, 0.3);
+            gl.glVertex3d(0.355, -0.555, 0.3);
+        gl.glEnd();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glBegin(GL2.GL_POLYGON);
+            gl.glVertex3d(-0.35, -0.55, 0.31);
+            gl.glVertex3d(-0.35, -0.4, 0.31);
+            gl.glVertex3d(0.35, -0.4, 0.31);
+            gl.glVertex3d(0.35, -0.55, 0.31);
         gl.glEnd();
         if(opCreditosMenu){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.36, -0.56);
-                gl.glVertex2d(-0.36, -0.39);
-                gl.glVertex2d(0.36, -0.39);
-                gl.glVertex2d(0.36, -0.56);
+                gl.glVertex3d(-0.35, -0.55, 0.32);
+                gl.glVertex3d(-0.35, -0.4, 0.32);
+                gl.glVertex3d(0.35, -0.4, 0.32);
+                gl.glVertex3d(0.35, -0.55, 0.32);
             gl.glEnd();
         }
-        gl.glColor3d(0, 1, 1);
+        gl.glColor3d(1, 1, 1);
         gl.glBegin(GL2.GL_POLYGON);
-            gl.glVertex2d(-0.35, -0.55);
-            gl.glVertex2d(-0.35, -0.4);
-            gl.glVertex2d(0.35, -0.4);
-            gl.glVertex2d(0.35, -0.55);
+            gl.glVertex3d(-0.355, -0.755, 0.3);
+            gl.glVertex3d(-0.355, -0.595, 0.3);
+            gl.glVertex3d(0.355, -0.5950, 0.3);
+            gl.glVertex3d(0.355, -0.755, 0.3);
+        gl.glEnd();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glBegin(GL2.GL_POLYGON);
+            gl.glVertex3d(-0.35, -0.75, 0.31);
+            gl.glVertex3d(-0.35, -0.6, 0.31);
+            gl.glVertex3d(0.35, -0.6, 0.31);
+            gl.glVertex3d(0.35, -0.75, 0.31);
         gl.glEnd();
         if(opSairMenu){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.36, -0.76);
-                gl.glVertex2d(-0.36, -0.59);
-                gl.glVertex2d(0.36, -0.59);
-                gl.glVertex2d(0.36, -0.76);
+                gl.glVertex3d(-0.35, -0.75, 0.32);
+                gl.glVertex3d(-0.35, -0.6, 0.32);
+                gl.glVertex3d(0.35, -0.6, 0.32);
+                gl.glVertex3d(0.35, -0.75, 0.32);
             gl.glEnd();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glBegin(GL2.GL_POLYGON);
-            gl.glVertex2d(-0.35, -0.75);
-            gl.glVertex2d(-0.35, -0.6);
-            gl.glVertex2d(0.35, -0.6);
-            gl.glVertex2d(0.35, -0.75);
-        gl.glEnd();
-        
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Alien Cat", 520, 600);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Flappy Ovni", 520, 600);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Jogar", 520, 430);
         textRenderer.endRendering(); 
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Controles", 520, 335);
         textRenderer.endRendering(); 
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Creditos", 520, 240);
         textRenderer.endRendering(); 
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Sair", 520, 145);
         textRenderer.endRendering();
-        
         if(sairMenu){
             desenhaSairMenu(gl);
         }
         
     }
     
-    public void desenhaJogo(GL2 gl){
-        ovni.desenhaOvni(gl);
+    // Metodo que desenha o jogo
+    public void desenhaJogo(GL2 gl, GLUT glut){
+        ovni.desenhaOvni(gl, glut, textura, TEXTURA_METAL_OVNI, TEXTURA_VIDRO_OVNI, limite);
         for(int i = 0; i < listaAsteroide.size(); i++){
-            listaAsteroide.get(i).desenhaAsteroide(gl);
+            listaAsteroide.get(i).desenhaAsteroide(gl, glut, textura, TEXTURA_ASTEROIDE, limite);
         }
         desenhaPontuacao();
         if(pausadoMenu){
@@ -273,313 +374,289 @@ public class Cena implements GLEventListener{
         }
     }
     
+    // Metodo que desenha a tela de controles
     public void desenhaControles(GL2 gl){
-        gl.glColor3d(1, 1, 0);
+        gl.glColor3d(1, 1, 1);
         gl.glPushMatrix();
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.4, -0.5);
-                gl.glVertex2d(-0.4, 0.5);
-                gl.glVertex2d(0.4, 0.5);
-                gl.glVertex2d(0.4, -0.5);
+                gl.glVertex3d(-0.405, -0.105, 0.3);
+                gl.glVertex3d(-0.405, 0.405, 0.3);
+                gl.glVertex3d(0.405, 0.4050, 0.3);
+                gl.glVertex3d(0.405, -0.105, 0.3);
+            gl.glEnd();
+        gl.glPopMatrix();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glPushMatrix();
+            gl.glBegin(GL2.GL_POLYGON);
+                gl.glVertex3d(-0.4, -0.1, 0.31);
+                gl.glVertex3d(-0.4, 0.4, 0.31);
+                gl.glVertex3d(0.4, 0.4, 0.31);
+                gl.glVertex3d(0.4, -0.1, 0.31);
             gl.glEnd();
         gl.glPopMatrix();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Controles", 520, 600);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Espaço: Pular", 520, 550);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Esc: Pausar Jogo", 520, 500);
         textRenderer.endRendering();
     }
     
+    // Metodo que desenha a tela de creditos
     public void desenhaCreditos(GL2 gl){
-        gl.glColor3d(1, 1, 0);
+        gl.glColor3d(1, 1, 1);
         gl.glPushMatrix();
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.4, -0.5);
-                gl.glVertex2d(-0.4, 0.5);
-                gl.glVertex2d(0.4, 0.5);
-                gl.glVertex2d(0.4, -0.5);
+                gl.glVertex3d(-0.605, -0.205, 0.3);
+                gl.glVertex3d(-0.605, 0.405, 0.3);
+                gl.glVertex3d(0.605, 0.405, 0.3);
+                gl.glVertex3d(0.605, -0.2050, 0.3);
+            gl.glEnd();
+        gl.glPopMatrix();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glPushMatrix();
+            gl.glBegin(GL2.GL_POLYGON);
+                gl.glVertex3d(-0.6, -0.2, 0.31);
+                gl.glVertex3d(-0.6, 0.4, 0.31);
+                gl.glVertex3d(0.6, 0.4, 0.31);
+                gl.glVertex3d(0.6, -0.2, 0.31);
             gl.glEnd();
         gl.glPopMatrix();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Creditos", 520, 650);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Creditos", 435, 630);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Desenvolvedores:", 520, 550);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Desenvolvedores:", 435, 530);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Matheus Martins", 520, 500);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Matheus Martins Garcia,", 435, 480);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Garcia", 520, 450);
-        textRenderer.endRendering();
-        textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Miguel", 520, 400);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Miguel Rios da Silva", 435, 430);
         textRenderer.endRendering();
     }
     
+    // Metodo que desenha a Pontuação na tela
     public void desenhaPontuacao(){
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw(pontuacao+"", 620, 900);
         textRenderer.endRendering();
     }
     
+    // Metodo que desenha o menu de pause
     public void desenhaPausadoMenu(GL2 gl){
-        gl.glColor3d(1, 1, 0);
+        gl.glColor3d(1, 1, 1);
         gl.glPushMatrix();
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.4, -0.6);
-                gl.glVertex2d(-0.4, 0.5);
-                gl.glVertex2d(0.4, 0.5);
-                gl.glVertex2d(0.4, -0.6);
+                gl.glVertex3d(-0.405, -0.455, 0.3);
+                gl.glVertex3d(-0.405, 0.505, 0.3);
+                gl.glVertex3d(0.405, 0.505, 0.3);
+                gl.glVertex3d(0.405, -0.455, 0.3);
+            gl.glEnd();
+        gl.glPopMatrix();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glPushMatrix();
+            gl.glBegin(GL2.GL_POLYGON);
+                gl.glVertex3d(-0.4, -0.45, 0.31);
+                gl.glVertex3d(-0.4, 0.5, 0.31);
+                gl.glVertex3d(0.4, 0.5, 0.31);
+                gl.glVertex3d(0.4, -0.45, 0.31);
             gl.glEnd();
         gl.glPopMatrix();
         if(opVoltarPause){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.16);
-                    gl.glVertex2d(-0.36, 0.01);
-                    gl.glVertex2d(0.36, 0.01);
-                    gl.glVertex2d(0.36, -0.16);
+                    gl.glVertex3d(-0.4, -0.15, 0.32);
+                    gl.glVertex3d(-0.4, 0, 0.32);
+                    gl.glVertex3d(0.4, 0, 0.32);
+                    gl.glVertex3d(0.4, -0.15, 0.32);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.15);
-                gl.glVertex2d(-0.35, 0);
-                gl.glVertex2d(0.35, 0);
-                gl.glVertex2d(0.35, -0.15);
-            gl.glEnd();
-        gl.glPopMatrix();
         if(opMenuPause){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.36);
-                    gl.glVertex2d(-0.36, -0.19);
-                    gl.glVertex2d(0.36, -0.19);
-                    gl.glVertex2d(0.36, -0.36);
+                    gl.glVertex3d(-0.4, -0.30, 0.32);
+                    gl.glVertex3d(-0.4, -0.15, 0.32);
+                    gl.glVertex3d(0.4, -0.15, 0.32);
+                    gl.glVertex3d(0.4, -0.30, 0.32);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.35);
-                gl.glVertex2d(-0.35, -0.20);
-                gl.glVertex2d(0.35, -0.20);
-                gl.glVertex2d(0.35, -0.35);
-            gl.glEnd();
-        gl.glPopMatrix();
         if(opSairPause){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.56);
-                    gl.glVertex2d(-0.36, -0.39);
-                    gl.glVertex2d(0.36, -0.39);
-                    gl.glVertex2d(0.36, -0.56);
+                    gl.glVertex3d(-0.4, -0.45, 0.32);
+                    gl.glVertex3d(-0.4, -0.30, 0.32);
+                    gl.glVertex3d(0.4, -0.30, 0.32);
+                    gl.glVertex3d(0.4, -0.45, 0.32);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.55);
-                gl.glVertex2d(-0.35, -0.40);
-                gl.glVertex2d(0.35, -0.40);
-                gl.glVertex2d(0.35, -0.55);
-            gl.glEnd();
-        gl.glPopMatrix();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Jogo Pausado", 520, 600);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Voltar ao Jogo", 520, 430);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Menu", 520, 335);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Menu", 520, 360);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Sair do Jogo", 520, 240);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Sair do Jogo", 520, 290);
         textRenderer.endRendering();
     }
     
+    // Metodo que desenha o menu de sair do jogo
     public void desenhaSairMenu(GL2 gl){
-        gl.glColor3d(0, 1, 0);
+        gl.glColor3d(1, 1, 1);
         gl.glPushMatrix();
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.4, -0.5);
-                gl.glVertex2d(-0.4, 0.4);
-                gl.glVertex2d(0.4, 0.4);
-                gl.glVertex2d(0.4, -0.5);
+                gl.glVertex3d(-0.405, -0.305, 0.33);
+                gl.glVertex3d(-0.405, 0.405, 0.33);
+                gl.glVertex3d(0.405, 0.405, 0.33);
+                gl.glVertex3d(0.405, -0.305, 0.33);
+            gl.glEnd();
+        gl.glPopMatrix();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glPushMatrix();
+            gl.glBegin(GL2.GL_POLYGON);
+                gl.glVertex3d(-0.4, -0.3, 0.34);
+                gl.glVertex3d(-0.4, 0.4, 0.34);
+                gl.glVertex3d(0.4, 0.4, 0.34);
+                gl.glVertex3d(0.4, -0.3, 0.34);
             gl.glEnd();
         gl.glPopMatrix();
         if(opSimSair){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.16);
-                    gl.glVertex2d(-0.36, 0.01);
-                    gl.glVertex2d(0.36, 0.01);
-                    gl.glVertex2d(0.36, -0.16);
+                    gl.glVertex3d(-0.4, -0.15, 0.35);
+                    gl.glVertex3d(-0.4, 0, 0.35);
+                    gl.glVertex3d(0.4, 0, 0.35);
+                    gl.glVertex3d(0.4, -0.15, 0.35);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.15);
-                gl.glVertex2d(-0.35, 0);
-                gl.glVertex2d(0.35, 0);
-                gl.glVertex2d(0.35, -0.15);
-            gl.glEnd();
-        gl.glPopMatrix();
         if(opNaoSair){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.36);
-                    gl.glVertex2d(-0.36, -0.19);
-                    gl.glVertex2d(0.36, -0.19);
-                    gl.glVertex2d(0.36, -0.36);
+                    gl.glVertex3d(-0.4, -0.30, 0.35);
+                    gl.glVertex3d(-0.4, -0.15, 0.35);
+                    gl.glVertex3d(0.4, -0.15, 0.35);
+                    gl.glVertex3d(0.4, -0.30, 0.35);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(1, 1, 0);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.35);
-                gl.glVertex2d(-0.35, -0.20);
-                gl.glVertex2d(0.35, -0.20);
-                gl.glVertex2d(0.35, -0.35);
-            gl.glEnd();
-        gl.glPopMatrix();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Deseja Sair?", 520, 600);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Sim", 520, 430);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Não", 520, 335);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Não", 520, 360);
         textRenderer.endRendering();
     }
     
+    // Metodo que desenha o menu de morte de jogo
     public void desenhaMorteMenu(GL2 gl){
-        gl.glColor3d(1, 1, 0);
+        gl.glColor3d(1, 1, 1);
         gl.glPushMatrix();
             gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.4, -0.6);
-                gl.glVertex2d(-0.4, 0.5);
-                gl.glVertex2d(0.4, 0.5);
-                gl.glVertex2d(0.4, -0.6);
+                gl.glVertex3d(-0.405, -0.455, 0.3);
+                gl.glVertex3d(-0.405, 0.505, 0.3);
+                gl.glVertex3d(0.405, 0.505, 0.3);
+                gl.glVertex3d(0.405, -0.455, 0.3);
+            gl.glEnd();
+        gl.glPopMatrix();
+        gl.glColor3d(0.098, 0.102, 0.341);
+        gl.glPushMatrix();
+            gl.glBegin(GL2.GL_POLYGON);
+                gl.glVertex3d(-0.4, -0.45, 0.31);
+                gl.glVertex3d(-0.4, 0.5, 0.31);
+                gl.glVertex3d(0.4, 0.5, 0.31);
+                gl.glVertex3d(0.4, -0.45, 0.31);
             gl.glEnd();
         gl.glPopMatrix();
         if(opTentarMorte){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.16);
-                    gl.glVertex2d(-0.36, 0.01);
-                    gl.glVertex2d(0.36, 0.01);
-                    gl.glVertex2d(0.36, -0.16);
+                    gl.glVertex3d(-0.4, -0.15, 0.32);
+                    gl.glVertex3d(-0.4, 0, 0.32);
+                    gl.glVertex3d(0.4, 0, 0.32);
+                    gl.glVertex3d(0.4, -0.15, 0.32);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.15);
-                gl.glVertex2d(-0.35, 0);
-                gl.glVertex2d(0.35, 0);
-                gl.glVertex2d(0.35, -0.15);
-            gl.glEnd();
-        gl.glPopMatrix();
         if(opMenuMorte){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.36);
-                    gl.glVertex2d(-0.36, -0.19);
-                    gl.glVertex2d(0.36, -0.19);
-                    gl.glVertex2d(0.36, -0.36);
+                    gl.glVertex3d(-0.4, -0.30, 0.32);
+                    gl.glVertex3d(-0.4, -0.15, 0.32);
+                    gl.glVertex3d(0.4, -0.15, 0.32);
+                    gl.glVertex3d(0.4, -0.30, 0.32);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.35);
-                gl.glVertex2d(-0.35, -0.20);
-                gl.glVertex2d(0.35, -0.20);
-                gl.glVertex2d(0.35, -0.35);
-            gl.glEnd();
-        gl.glPopMatrix();
         if(opSairMorte){
-            gl.glColor3d(1, 0, 0);
+            gl.glColor3d(0.353, 0.004, 0.008);
             gl.glPushMatrix();
                 gl.glBegin(GL2.GL_POLYGON);
-                    gl.glVertex2d(-0.36, -0.56);
-                    gl.glVertex2d(-0.36, -0.39);
-                    gl.glVertex2d(0.36, -0.39);
-                    gl.glVertex2d(0.36, -0.56);
+                    gl.glVertex3d(-0.4, -0.45, 0.32);
+                    gl.glVertex3d(-0.4, -0.30, 0.32);
+                    gl.glVertex3d(0.4, -0.30, 0.32);
+                    gl.glVertex3d(0.4, -0.45, 0.32);
                 gl.glEnd();
             gl.glPopMatrix();
         }
-        gl.glColor3d(0, 1, 1);
-        gl.glPushMatrix();
-            gl.glBegin(GL2.GL_POLYGON);
-                gl.glVertex2d(-0.35, -0.55);
-                gl.glVertex2d(-0.35, -0.40);
-                gl.glVertex2d(0.35, -0.40);
-                gl.glVertex2d(0.35, -0.55);
-            gl.glEnd();
-        gl.glPopMatrix();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Você Morreu!", 520, 650);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Sua pontuação foi: " + pontuacao, 520, 600);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Pontuação: " + pontuacao, 520, 600);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
+            textRenderer.setColor(Color.WHITE);
             textRenderer.draw("Tentar de novo", 520, 430);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Menu", 520, 335);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Menu", 520, 360);
         textRenderer.endRendering();
         textRenderer.beginRendering(Renderer.screenWidth, Renderer.screenHeight);       
-            textRenderer.setColor(Color.BLUE);
-            textRenderer.draw("Sair do Jogo", 520, 240);
+            textRenderer.setColor(Color.WHITE);
+            textRenderer.draw("Sair do Jogo", 520, 290);
         textRenderer.endRendering();
     }
     
+    // Metodo que define o que a tecla da setinha para cima irá fazer
     public void teclaCima(){
         if(telaMenu){
             if(sairMenu){
@@ -642,6 +719,7 @@ public class Cena implements GLEventListener{
         }
     }
     
+    // Metodo que define o que a tecla da setinha para baixo irá fazer
     public void teclaBaixo(){
         if(telaMenu){
             if(sairMenu){
@@ -704,6 +782,7 @@ public class Cena implements GLEventListener{
         }
     }
     
+    // Metodo que define o que a tecla espaço irá fazer
     public void teclaSpaco(){
         if(telaMenu){
             if(sairMenu){
@@ -764,6 +843,7 @@ public class Cena implements GLEventListener{
         }
     }
     
+    // Metodo que define o que a tecla "Esc" irá fazer
     public void teclaEsc(){
         if(telaMenu){
             if(sairMenu){
@@ -795,16 +875,19 @@ public class Cena implements GLEventListener{
         
     }
     
+    // Metodo que chama o menu de sair do jogo
     public void chamarSairMenu(){
         sairMenu = true;
         opSimSair = false;
         opNaoSair = true;
     }
     
+    // Metodo que fecha o menu de sair do jogo
     public void fecharSairMenu(){
         sairMenu = false;
     }
     
+    // Metodo que chama o menu de pause dentro do jogo
     public void chamarPausadoMenu(){
         pausadoMenu = true;
         opVoltarPause = true;
@@ -812,22 +895,25 @@ public class Cena implements GLEventListener{
         opSairPause = false;
     }
     
+    // Metodo que fecha o menu de pause
     public void fecharPausadoMenu(){
         pausadoMenu = false;
     }
     
+    // Metodo que chama o menu de morte dentro do jogo
     public void chamarMorteMenu(){
         morteMenu = true;
         opTentarMorte = true;
         opMenuMorte = false;
         opSairMorte = false;
-        System.out.println(opTentarMorte);
     }
     
+    // Metodo que fecha o menu de morte
     public void fecharMorteMenu(){
         morteMenu = false;
     }
     
+    // Metodo que inicia as variáveis do jogo
     public void iniciarJogo(){
         ovni = new OvniGato();
         pontuacao = 0;
@@ -838,6 +924,7 @@ public class Cena implements GLEventListener{
         opTentarMorte = opMenuMorte = opSairMorte = false;
     }
     
+    // Metodo para trocar as telas do jogo
     public void trocarTela(int codTela){
         switch (codTela) {
             case 1 -> {
@@ -871,5 +958,25 @@ public class Cena implements GLEventListener{
             }
             default -> System.out.println("Tela invalida");
         }
+    }
+    
+    // Metodo que configura e habilita a iluminação
+    public void iluminacao(GL2 gl){
+        float luzAmbiente[] = {0.2f, 0.2f, 0.2f, 1f};
+        float posicaoLuz[] = {0.0f, 50.0f, 50.0f, 0.0f};
+        float especularidade[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        int especMaterial = 60;
+        
+        gl.glMaterialfv(GL2.GL_FRONT, GL2.GL_SPECULAR, especularidade, 0);
+        gl.glMateriali(GL2.GL_FRONT, GL2.GL_SHININESS, especMaterial);
+        
+        gl.glLightModelfv(GL2.GL_LIGHT_MODEL_AMBIENT, luzAmbiente, 0);
+        gl.glLightfv(GL2.GL_LIGHT0, GL2.GL_AMBIENT, luzAmbiente, 0);
+        gl.glLightfv(GL2.GL_LIGHT0, GL2.GL_POSITION, posicaoLuz, 0);
+        
+        gl.glEnable(GL2.GL_COLOR_MATERIAL);
+        gl.glEnable(GL2.GL_LIGHTING);
+        gl.glEnable(GL2.GL_LIGHT0);
+        gl.glShadeModel(GL2.GL_SMOOTH);
     }
 }

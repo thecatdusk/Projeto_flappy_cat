@@ -15,8 +15,7 @@ public class KeyBoard implements KeyListener{
     
     @Override
     public void keyPressed(KeyEvent e) {        
-        //System.out.println("Key pressed: " + e.getKeyCode());
-        if(e.getKeyCode() == KeyEvent.VK_ESCAPE){
+        if(e.getKeyCode() == KeyEvent.VK_ESCAPE){ // Chama método que determina o que cada tecla vai fazer
             cena.teclaEsc();
         }
         if(e.getKeyCode() == KeyEvent.VK_SPACE){
